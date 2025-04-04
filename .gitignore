@@ -10,4 +10,4 @@ __pycache__/
 test_scripts/
 
 # Cache
-tmp/
+cache/

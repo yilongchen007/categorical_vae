@@ -11,7 +11,7 @@ def get_config():
 
     # Data & Saving
     parser.add_argument('--data_path', type=str, default='./data/data_compressed.npz')
-    parser.add_argument('--save_path', type=str, default='./checkpoints')
+    parser.add_argument('--save_path', type=str, default='./checkpoints/cache')
     parser.add_argument('--version', type=str, default='v0')
 
     # Model config
