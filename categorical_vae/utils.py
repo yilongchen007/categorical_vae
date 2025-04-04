@@ -1,6 +1,66 @@
 import torch
 import torch.distributions as dist
 import numpy as np
+import argparse
+
+
+def get_config():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--device', type=str, default='cpu')
+
+    # Data & Saving
+    parser.add_argument('--data_path', type=str, default='./data/data_compressed.npz')
+    parser.add_argument('--save_path', type=str, default='./checkpoints')
+    parser.add_argument('--version', type=str, default='v0')
+
+    # Model config
+    parser.add_argument('--encoder_type', type=str, default='transformer')
+    parser.add_argument('--decoder_type', type=str, default='simple')
+    parser.add_argument('--embedding_dim', type=int, default=64)
+    parser.add_argument('--hidden_dim', type=int, default=128)
+    parser.add_argument('--N', type=int, default=1)
+    parser.add_argument('--K', type=int, default=64)
+
+    # Training config
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--initial_lr', type=float, default=0.05)
+    parser.add_argument('--lr_decay', type=float, default=0.9)
+    parser.add_argument('--max_steps', type=int, default=25000)
+    parser.add_argument('--model_save_interval', type=int, default=5000)
+
+    # Temperature config
+    parser.add_argument('--initial_temp', type=float, default=1.0)
+    parser.add_argument('--min_temp', type=float, default=0.01)
+    parser.add_argument('--temp_decay', type=float, default=0.0001)
+
+    args = parser.parse_args()
+    return vars(args)
+
+
+def split_tensor_efficient(tensor, train_ratio=0.8, seed=42):
+    np.random.seed(seed)  # Ensure reproducibility
+    
+    # Get the indices of all nonzero values
+    nonzero_indices = np.nonzero(tensor)  # Tuple of arrays
+    
+    # Flattened indices for random selection
+    num_nonzero = len(nonzero_indices[0])
+    train_size = int(num_nonzero * train_ratio)
+    
+    # Randomly select indices for the training set
+    train_mask = np.zeros(num_nonzero, dtype=bool)
+    train_mask[np.random.choice(num_nonzero, size=train_size, replace=False)] = True
+    
+    # Initialize empty tensors
+    train_tensor = np.zeros_like(tensor)
+    test_tensor = np.zeros_like(tensor)
+    
+    # Assign values based on the random mask
+    train_tensor[nonzero_indices] = tensor[nonzero_indices] * train_mask
+    test_tensor[nonzero_indices] = tensor[nonzero_indices] * (~train_mask)
+
+    return train_tensor, test_tensor
 
 
 def gumbel_distribution_sample(shape: torch.Size, eps=1e-20) -> torch.Tensor:
@@ -50,26 +110,3 @@ def categorical_kl_divergence(phi: torch.Tensor) -> torch.Tensor:
     return kl.view(B, N)
 
 
-def split_tensor_efficient(tensor, train_ratio=0.8, seed=42):
-    np.random.seed(seed)  # Ensure reproducibility
-    
-    # Get the indices of all nonzero values
-    nonzero_indices = np.nonzero(tensor)  # Tuple of arrays
-    
-    # Flattened indices for random selection
-    num_nonzero = len(nonzero_indices[0])
-    train_size = int(num_nonzero * train_ratio)
-    
-    # Randomly select indices for the training set
-    train_mask = np.zeros(num_nonzero, dtype=bool)
-    train_mask[np.random.choice(num_nonzero, size=train_size, replace=False)] = True
-    
-    # Initialize empty tensors
-    train_tensor = np.zeros_like(tensor)
-    test_tensor = np.zeros_like(tensor)
-    
-    # Assign values based on the random mask
-    train_tensor[nonzero_indices] = tensor[nonzero_indices] * train_mask
-    test_tensor[nonzero_indices] = tensor[nonzero_indices] * (~train_mask)
-
-    return train_tensor, test_tensor

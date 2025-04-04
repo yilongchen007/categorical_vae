@@ -243,7 +243,7 @@ class CategoricalVAE(torch.nn.Module):
 
         z_given_x = gumbel_softmax(phi, temperature, batch=True)
         x_prob = self.decoder(z_given_x)
-        # x_prob = self.decoder(phi)
+
         return phi, x_prob
 
 

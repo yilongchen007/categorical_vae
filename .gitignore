@@ -9,5 +9,5 @@ __pycache__/
 # Test scripts
 test_scripts/
 
-# Dataset
-data/
+# Cache
+tmp/
