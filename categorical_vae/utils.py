@@ -11,7 +11,7 @@ def get_config():
 
     # Data & Saving
     parser.add_argument('--data_path', type=str, default='./data/data_compressed.npz')
-    parser.add_argument('--save_path', type=str, default='./checkpoints/cache')
+    parser.add_argument('--save_path', type=str, default='./cache')
     parser.add_argument('--version', type=str, default='v0')
 
     # Model config
@@ -81,7 +81,7 @@ def gumbel_softmax_distribution_sample(logits: torch.Tensor, temperature: float)
     temperature -> 0, this distribution approaches a categorical distribution.
     """
     assert len(logits.shape) == 2 # (should be of shape (b, n_classes))
-    y = logits + gumbel_distribution_sample(logits.shape)
+    y = logits + gumbel_distribution_sample(logits.shape).to(logits.device)
     return torch.nn.functional.softmax(y / temperature, dim=-1)
 
 def gumbel_softmax(logits: torch.Tensor, temperature: float, batch=False) -> torch.Tensor:
@@ -105,7 +105,7 @@ def categorical_kl_divergence(phi: torch.Tensor) -> torch.Tensor:
     B, N, K = phi.shape
     phi = phi.view(B*N, K)
     q = dist.Categorical(logits=phi)
-    p = dist.Categorical(probs=torch.full((B*N, K), 1.0/K)) # uniform bunch of K-class categorical distributions
+    p = dist.Categorical(probs=torch.full((B*N, K), 1.0/K, device=phi.device)) # uniform bunch of K-class categorical distributions
     kl = dist.kl.kl_divergence(q, p) # kl is of shape [B*N]
     return kl.view(B, N)
 

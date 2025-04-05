@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
 import os
 import torch
 import torch.nn.functional as F
