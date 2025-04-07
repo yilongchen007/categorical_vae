@@ -112,4 +112,3 @@ def categorical_kl_divergence(phi: torch.Tensor) -> torch.Tensor:
     kl = dist.kl.kl_divergence(q, p) # kl is of shape [B*N]
     return kl.view(B, N)
 
-
