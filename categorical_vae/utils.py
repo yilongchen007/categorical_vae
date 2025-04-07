@@ -34,6 +34,9 @@ def get_config():
     parser.add_argument('--min_temp', type=float, default=0.01)
     parser.add_argument('--temp_decay', type=float, default=0.0001)
 
+    # Optional CP initialization
+    parser.add_argument('--cp_path', type=str, default='', help='Path to CP factor .pkl file')
+
     args = parser.parse_args()
     return vars(args)
 

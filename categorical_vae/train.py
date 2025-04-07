@@ -2,9 +2,11 @@ import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import os
+import pickle
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.nn import CrossEntropyLoss
 import numpy as np
 import pandas as pd
 import tqdm
@@ -19,10 +21,16 @@ class CVAETrainer:
     def __init__(self, config):
         self.config = config
         self.device = config['device']
-        print("Using device:", self.device)
+        print(f"[INFO] Using device: {self.device}")
 
         self.data = np.load(config['data_path'])
         self._prepare_data()
+        self.train_loader = DataLoader(
+            TensorDataset(self.train_data), batch_size=config['batch_size'], shuffle=True
+        )
+        self.test_loader = DataLoader(
+            TensorDataset(self.test_data), batch_size=config['batch_size'], shuffle=True
+        )
 
         self.save_path = os.path.join(config['save_path'], config['version'])
 
@@ -40,22 +48,32 @@ class CVAETrainer:
         self.optimizer = optim.SGD(self.model.parameters(), lr=config['initial_lr'], momentum=0.0)
         self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=config['lr_decay'])
 
-        self.train_loader = DataLoader(
-            TensorDataset(self.train_data),
-            batch_size=config['batch_size'],
-            shuffle=True
-        )
-
         self.max_steps = config['max_steps']
         self.model_save_interval = config['model_save_interval']
         self.temp = config['initial_temp']
         self.min_temp = config['min_temp']
         self.temp_decay = config['temp_decay']
 
+        if config['cp_path']:
+            if not os.path.exists(config['cp_path']):
+                raise FileNotFoundError(f"CP initialization file not found at: {config['cp_path']}")
+    
+        with open(config['cp_path'], 'rb') as f:
+            cp_tensor = pickle.load(f)
+            self.initialize_decoder_logits_from_cp(cp_tensor)
+
     def _prepare_data(self):
-        train_data, _ = split_tensor_efficient(self.data['Y'])
-        source, target, action, date = np.where(train_data > 0)
-        counts = train_data[source, target, action, date]
+        train_data, test_data = split_tensor_efficient(self.data['Y'])
+
+        self.train_data = self._build_tensor_from_array(train_data).to(self.device)
+        self.test_data = self._build_tensor_from_array(test_data).to(self.device)
+
+        print(f"[INFO] Prepared data: train={self.train_data.shape[0]}, test={self.test_data.shape[0]}")
+
+
+    def _build_tensor_from_array(self, array):
+        source, target, action, date = np.where(array > 0)
+        counts = array[source, target, action, date]
 
         s_r = np.repeat(source, counts)
         t_r = np.repeat(target, counts)
@@ -79,12 +97,30 @@ class CVAETrainer:
         for col in df.columns:
             df[col] = df[col].map(mappings[col])
 
-        tensor_data = torch.tensor(df.values, dtype=torch.long)
-        tensor_data = tensor_data[torch.argsort(tensor_data[:, -1])]
+        tensor = torch.tensor(df.values, dtype=torch.long)
+        return tensor[torch.argsort(tensor[:, -1])]
+    
 
-        self.train_data = tensor_data.to(self.device)
+    def initialize_decoder_logits_from_cp(self, cp_tensor, eps=1e-8):
+        if not hasattr(self.model.decoder, "probability_matrices"):
+            raise AttributeError("decoder does not have 'probability_matrices'")
+        
+        for i, layer in enumerate(self.model.decoder.probability_matrices):
+            factor = cp_tensor.factors[i]  # shape: (num_categories, latent_dim)
 
+            prob_matrix = factor / (factor.sum(axis=1, keepdims=True) + eps)
+            logit_matrix = np.log(prob_matrix + eps)
+            logit_tensor = torch.tensor(logit_matrix, dtype=torch.float32, device = self.device)
+
+            assert logit_tensor.shape == layer.weight.shape, f"Shape mismatch: {logit_tensor.shape} vs {layer.weight.shape}"
+            with torch.no_grad():
+                layer.weight.copy_(logit_tensor)
+
+        print(f"[INFO] Initialized decoder logits from CP factor")
+    
+    
     def train(self):
+        self.model.train()
         recon_losses, kl_losses, total_losses = [], [], []
         step = 0
         progress_bar = tqdm.tqdm(total=self.max_steps, desc='Training')
@@ -132,9 +168,65 @@ class CVAETrainer:
                 'total_loss': total_losses
             }, f)
 
+        _ = self.evaluate_reconstruction()
+
+    
+    def save_model(self):
+        torch.save(self.model.state_dict(), os.path.join(self.save_path, "saved.pth"))
+    
     def load_model(self, path):
-        self.model.load_state_dict(torch.load(path, map_location=self.device))
+        self.model.load_state_dict(torch.load(path, map_location=self.device, weights_only=True))
         self.model.eval()
+
+
+    def evaluate_reconstruction(self):
+        """
+        Evaluate full reconstruction accuracy across all categorical variables
+        and compute average cross entropy loss for each.
+
+        Returns:
+            dict: Overall accuracy and average cross-entropy loss per variable.
+        """
+        self.model.eval()
+        correct = [0] * 4
+        total = 0
+        ce_loss = [0.0] * 4  # cross-entropy per variable
+        loss_fn = CrossEntropyLoss(reduction='sum')  # sum over batch
+
+        with torch.no_grad():
+            for batch in self.train_loader:
+                inputs = batch[0].to(self.device)  # shape: [B, 4]
+                true_vals = [inputs[:, i] for i in range(4)]  # ground truth
+                batch_size = inputs.size(0)
+
+                _, x_hat_logits = self.model(inputs)  # list of [B, K_i] logits
+
+                for i in range(4):  # loop over variables
+                    preds = torch.argmax(x_hat_logits[i], dim=-1)
+                    correct[i] += (preds == true_vals[i]).sum().item()
+
+                    ce_loss[i] += loss_fn(x_hat_logits[i], true_vals[i]).item()
+
+                total += batch_size
+
+        accuracy = [c / total for c in correct]
+        avg_ce = [l / total for l in ce_loss]
+
+        for i, var in enumerate(['source', 'target', 'action', 'date']):
+            print(f"[{var}] Acc: {accuracy[i]:.4f} | CE Loss: {avg_ce[i]:.4f}")
+
+        overall_acc = sum(correct) / (total * 4)
+        overall_ce = sum(ce_loss) / (total * 4)
+
+        print(f"[Overall] Acc: {overall_acc:.4f} | Avg CE Loss: {overall_ce:.4f}")
+
+        return {
+            "accuracy": accuracy,
+            "cross_entropy": avg_ce,
+            "overall_accuracy": overall_acc,
+            "overall_cross_entropy": overall_ce
+        }
+
 
 
 def main():
