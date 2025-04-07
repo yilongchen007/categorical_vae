@@ -23,16 +23,16 @@ def get_config():
     parser.add_argument('--K', type=int, default=64)
 
     # Training config
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--initial_lr', type=float, default=0.05)
+    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--initial_lr', type=float, default=0.01)
     parser.add_argument('--lr_decay', type=float, default=0.9)
-    parser.add_argument('--max_steps', type=int, default=25000)
+    parser.add_argument('--max_steps', type=int, default=100000)
     parser.add_argument('--model_save_interval', type=int, default=5000)
 
     # Temperature config
     parser.add_argument('--initial_temp', type=float, default=1.0)
     parser.add_argument('--min_temp', type=float, default=0.01)
-    parser.add_argument('--temp_decay', type=float, default=0.0001)
+    parser.add_argument('--temp_decay', type=float, default=0.001)
 
     # Optional CP initialization
     parser.add_argument('--cp_path', type=str, default='', help='Path to CP factor .pkl file')

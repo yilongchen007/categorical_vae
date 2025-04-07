@@ -208,6 +208,7 @@ class Decoder(nn.Module):
             z = self.batch_outer_product(z)
             logits = [layer(z) for layer in self.probability_matrices]
 
+
         else: 
             raise Exception
         
@@ -240,8 +241,13 @@ class CategoricalVAE(torch.nn.Module):
             x_hat: auto-encoder reconstruction of x
         """
         phi = self.encoder(x)
+        phi.retain_grad()
 
         z_given_x = gumbel_softmax(phi, temperature, batch=True)
+        z_given_x.retain_grad()
+
+        self._debug = {'phi':phi, 'z_given_x':z_given_x}
+
         x_prob = self.decoder(z_given_x)
 
         return phi, x_prob

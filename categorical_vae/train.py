@@ -45,7 +45,7 @@ class CVAETrainer:
             Decoder(unique_counts, [N, K], hdim, config['decoder_type'])
         ).to(self.device)
 
-        self.optimizer = optim.SGD(self.model.parameters(), lr=config['initial_lr'], momentum=0.0)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=config['initial_lr'])
         self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=config['lr_decay'])
 
         self.max_steps = config['max_steps']
@@ -58,9 +58,14 @@ class CVAETrainer:
             if not os.path.exists(config['cp_path']):
                 raise FileNotFoundError(f"CP initialization file not found at: {config['cp_path']}")
     
-        with open(config['cp_path'], 'rb') as f:
-            cp_tensor = pickle.load(f)
-            self.initialize_decoder_logits_from_cp(cp_tensor)
+            with open(config['cp_path'], 'rb') as f:
+                cp_tensor = pickle.load(f)
+                self.initialize_decoder_logits_from_cp(cp_tensor)
+        else:
+            for layer in self.model.decoder.probability_matrices:
+                torch.nn.init.normal_(layer.weight, mean=0.0, std=1)
+    
+        # self.analyze_decoder_logits_weights()
 
     def _prepare_data(self):
         train_data, test_data = split_tensor_efficient(self.data['Y'])
@@ -129,16 +134,26 @@ class CVAETrainer:
             for (x_batch,) in self.train_loader:
                 x_batch = x_batch.to(self.device)
 
-                phi, x_prob = self.model(x_batch, self.temp)
+                phi, x_prob = self.model(x_batch, temperature=self.temp)
+
                 recon = sum([F.cross_entropy(x_prob[i], x_batch[:, i]) for i in range(x_batch.shape[1])]) / x_batch.shape[0]
                 kl = torch.mean(torch.sum(categorical_kl_divergence(phi), dim=1))
-                loss = recon + kl / 100
+                loss = recon + kl * min(1, 2*step/self.max_steps)
 
                 recon_losses.append(recon.item())
                 kl_losses.append(kl.item())
                 total_losses.append(loss.item())
 
                 loss.backward()
+
+                print(f"phi.grad std: {self.model._debug['phi'].grad.std().item():.6f}, z.grad std: {self.model._debug['z_given_x'].grad.std().item():.6f}")
+
+                # for name, param in self.model.named_parameters():
+                #     if param.grad is not None:
+                #         print(f"{name} grad OK ✅, norm = {param.grad.norm().item():.4f}")
+                #     else:
+                #         pass
+
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                 self.optimizer.step()
                 self.optimizer.zero_grad()
@@ -168,7 +183,7 @@ class CVAETrainer:
                 'total_loss': total_losses
             }, f)
 
-        _ = self.evaluate_reconstruction()
+        # _ = self.evaluate_reconstruction()
 
     
     def save_model(self):
@@ -179,6 +194,36 @@ class CVAETrainer:
         self.model.eval()
 
 
+    def analyze_decoder_logits_weights(self, eps=1e-8):
+        """
+        Analyze a decoder weight matrix (logits) for flatness and informativeness.
+
+        Args:
+            weight (torch.Tensor): decoder weight (shape: [num_classes, latent_dim])
+            eps (float): for numerical stability
+            plot_rows (int): number of rows to plot
+        """
+        weight = self.model.decoder.probability_matrices[0].weight.detach().cpu().numpy()  # convert to numpy
+        logits = weight  # [num_classes, latent_dim]
+
+        # Compute probability matrix from logits
+        prob_matrix = np.exp(logits - logits.max(axis=1, keepdims=True))  # softmax numerator
+        prob_matrix /= prob_matrix.sum(axis=1, keepdims=True) + eps       # softmax denominator
+
+        # Entropy per row
+        entropy = -np.sum(prob_matrix * np.log(prob_matrix + eps), axis=1)
+        max_entropy = np.log(prob_matrix.shape[1])
+        relative_entropy = entropy / max_entropy
+
+        # Std per row
+        row_std = prob_matrix.std(axis=1)
+
+        print(f"  🔹 Avg relative entropy = {relative_entropy.mean():.4f}")
+        print(f"     High-entropy rows (≥ 0.95): {(relative_entropy >= 0.95).sum()} / {len(relative_entropy)}")
+        print(f"  🔸 Mean row std = {row_std.mean():.4f}")
+        print(f"     Low-std rows (≤ 0.02): {(row_std <= 0.02).sum()} / {len(row_std)}")
+    
+    
     def evaluate_reconstruction(self):
         """
         Evaluate full reconstruction accuracy across all categorical variables

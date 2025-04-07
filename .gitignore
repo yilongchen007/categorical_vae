@@ -11,3 +11,6 @@ test_scripts/
 
 # Cache
 cache/
+
+# Logs
+*.out
