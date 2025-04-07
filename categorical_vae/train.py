@@ -146,7 +146,7 @@ class CVAETrainer:
 
                 loss.backward()
 
-                print(f"phi.grad std: {self.model._debug['phi'].grad.std().item():.6f}, z.grad std: {self.model._debug['z_given_x'].grad.std().item():.6f}")
+                # print(f"phi.grad std: {self.model._debug['phi'].grad.std().item():.6f}, z.grad std: {self.model._debug['z_given_x'].grad.std().item():.6f}")
 
                 # for name, param in self.model.named_parameters():
                 #     if param.grad is not None:

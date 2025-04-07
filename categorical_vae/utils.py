@@ -26,8 +26,8 @@ def get_config():
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--initial_lr', type=float, default=0.01)
     parser.add_argument('--lr_decay', type=float, default=0.9)
-    parser.add_argument('--max_steps', type=int, default=100000)
-    parser.add_argument('--model_save_interval', type=int, default=5000)
+    parser.add_argument('--max_steps', type=int, default=40000)
+    parser.add_argument('--model_save_interval', type=int, default=20000)
 
     # Temperature config
     parser.add_argument('--initial_temp', type=float, default=1.0)

@@ -23,8 +23,8 @@ class Encoder(nn.Module):
         self.hidden_dim = hidden_dim
         self.network = network
 
-        self.num_heads = 8
-        self.num_layers = 6
+        self.num_heads = 2
+        self.num_layers = 2
 
 
         assert len(self.latent_shape) == 2
@@ -184,11 +184,6 @@ class Decoder(nn.Module):
         Returns:
         - List of torch.Tensor: Each tensor contains logits for a categorical variable, shape [B, K_i].
         """
-        # # Pass through the main decoder network
-        # z = self.network(z)
-        
-        # # Produce logits for each categorical variable
-        # logits = [layer(z) for layer in self.output_layers]
 
         if self.network == 'transformer':
 
