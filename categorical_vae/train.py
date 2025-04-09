@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from .model import CategoricalVAE, Encoder, Decoder
 from .utils import split_tensor_efficient, categorical_kl_divergence, get_config
+from .plot import plot_decoder_prob_matrices
 
 
 class CVAETrainer:
@@ -33,6 +34,7 @@ class CVAETrainer:
         )
 
         self.save_path = os.path.join(config['save_path'], config['version'])
+        self.plot_path = os.path.join(config['plot_path'], config['version'])
 
         unique_counts = [len(self.data['actors']), len(self.data['actors']), len(self.data['actions']), len(self.data['dates'])]
         edim = config['embedding_dim']
@@ -184,6 +186,7 @@ class CVAETrainer:
             }, f)
 
         # _ = self.evaluate_reconstruction()
+        self.plot_prob_matrices()
 
     
     def save_model(self):
@@ -271,6 +274,12 @@ class CVAETrainer:
             "overall_accuracy": overall_acc,
             "overall_cross_entropy": overall_ce
         }
+    
+
+    def plot_prob_matrices(self):
+        actors, actions, dates = (self.data[key] for key in [ 'actors', 'actions', 'dates'])
+
+        plot_decoder_prob_matrices(self.model, actors, actions, dates, self.plot_path)
 
 
 

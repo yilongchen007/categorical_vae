@@ -12,5 +12,8 @@ test_scripts/
 # Cache
 cache/
 
+# Plots
+plots/
+
 # Logs
 *.out

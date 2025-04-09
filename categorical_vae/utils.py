@@ -12,7 +12,9 @@ def get_config():
     # Data & Saving
     parser.add_argument('--data_path', type=str, default='./data/data_compressed.npz')
     parser.add_argument('--save_path', type=str, default='./cache')
+    parser.add_argument('--plot_path', type=str, default='./plots')
     parser.add_argument('--version', type=str, default='v0')
+    
 
     # Model config
     parser.add_argument('--encoder_type', type=str, default='transformer')
