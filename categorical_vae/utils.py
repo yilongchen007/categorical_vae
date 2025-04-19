@@ -10,6 +10,7 @@ def get_config():
     parser.add_argument('--device', type=str, default='cpu')
 
     # Data & Saving
+    parser.add_argument('--dataset', type=str, default='icews')
     parser.add_argument('--data_path', type=str, default='./data/data_compressed.npz')
     parser.add_argument('--save_path', type=str, default='./cache')
     parser.add_argument('--plot_path', type=str, default='./plots')
@@ -25,25 +26,30 @@ def get_config():
     parser.add_argument('--K', type=int, default=64)
 
     # Training config
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--initial_lr', type=float, default=0.01)
     parser.add_argument('--lr_decay', type=float, default=0.9)
-    parser.add_argument('--max_steps', type=int, default=40000)
-    parser.add_argument('--model_save_interval', type=int, default=20000)
+    parser.add_argument('--max_steps', type=int, default=20_00)
+    parser.add_argument('--model_save_interval', type=int, default=25_00)
 
     # Temperature config
     parser.add_argument('--initial_temp', type=float, default=1.0)
     parser.add_argument('--min_temp', type=float, default=0.01)
     parser.add_argument('--temp_decay', type=float, default=0.001)
+    parser.add_argument('--kl_weight', type=float, default=0.01)
+
+
 
     # Optional CP initialization
     parser.add_argument('--cp_path', type=str, default='', help='Path to CP factor .pkl file')
+
+    parser.add_argument('--pretrain_path', type=str, default='', help='Path to pretrained model .pth file')
 
     args = parser.parse_args()
     return vars(args)
 
 
-def split_tensor_efficient(tensor, train_ratio=0.8, seed=42):
+def split_tensor_efficient(tensor, train_ratio=1, seed=42):
     np.random.seed(seed)  # Ensure reproducibility
     
     # Get the indices of all nonzero values
